@@ -2,6 +2,8 @@ const express = require("express");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
+const bodyParser = require("body-parser");
+const sharp = require ("sharp")
 
 const {
   userModel,
@@ -13,21 +15,29 @@ const {
 //Code related to file upload---------------------------------------
 //------------------------------------------------------------------
 
+let imageFileName = ""
+
 var storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads");
-  },
+    cb(null, "db/uploads");
+  }
+  ,
   filename: (req, file, cb) => {
     cb(null, file.fieldname + "-" + Date.now());
   },
 });
 
-var upload = multer({ storage: storage });
+const upload = multer({ storage: storage, limits: {
+  fileSize: 500000000,
+  fieldSize: 500000000} });
 
 //Code related to file upload---------------------------------------
 //------------------------------------------------------------------
 
 const app = express();
+app.use(bodyParser.urlencoded({extended: true }));
+app.use(express.json());
+
 
 app.post("/add_user", async (request, response) => {
   const user = new userModel(request.body);
@@ -125,27 +135,56 @@ app.get("/images", (req, res) => {
   });
 });
 
-app.post("/image", upload.single("file"), (req, res, next) => {
-  const obj = {
-    name: req.body.name,
-    desc: req.body.desc,
-    img: {
-      data: fs.readFileSync(
-        path.join(__dirname + "/uploads/" + req.file.filename)
-      ),
-      contentType: "image/png",
-    },
-  };
+//Promisify resize function
 
-  imageModel.create(obj, (err, item) => {
-    if (err) {
-      console.log(err);
-    } else {
-      // item.save();
-      console.log("Id of uploaded image", item._id);
-      res.redirect("/");
-    }
-  });
+const resizeImage = async (filename)=>{
+
+  console.log("Inside of resize")
+  try {
+    await sharp(__dirname + `/uploads/${filename}`)
+      .resize({
+        width: 640,
+        height: 480
+      })
+      .toFile(__dirname + `/uploads/${filename}_resized`);
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+app.post("/image", upload.single("file"), (req, res, next) => {
+
+  console.log("Inside of post")
+
+  resizeImage(req.file.filename).then(()=>{
+
+    const obj = {
+      name: req.body.name,
+      desc: req.body.desc,
+      img: {
+        data: fs.readFileSync(
+          path.join(__dirname + "/uploads/" + req.file.filename +"_resized")
+        ),
+        contentType: "image/png",
+      },
+    };
+  
+    imageModel.create(obj, (err, item) => {
+      if (err) {
+        console.log(err);
+      } else {
+        // item.save();
+        console.log("Id of uploaded image", item._id);
+        res.redirect("/");
+      }
+    });
+  })
+
 });
+
+app.use((err, req, res, next) => {
+  console.log("something went wrong: ", err)
+  
+})
 
 module.exports = app;
