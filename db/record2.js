@@ -140,6 +140,7 @@ app.get("/images", (req, res) => {
 const resizeImage = async (filename)=>{
 
   console.log("Inside of resize")
+  
   try {
     await sharp(__dirname + `/uploads/${filename}`)
       .resize({
